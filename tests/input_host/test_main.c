@@ -285,6 +285,23 @@ int main(void)
     settle();
     s = get(0, &rc);
     CHECK(rc == ERROR_SUCCESS && s.Gamepad.bAnalogButtons[XBOX_BUTTON_A] == 255);
+    xbox_HostInputKey('J', 0);
+    /* A pad switched on later takes player 1; the keyboard moves to player 2. */
+    pad1 = attach("Late pad");
+    settle();
+    s = get(0, &rc);          /* a poll takes in the pad events */
+    settle();
+    CHECK(xbox_HostInputSlotInfo(0, name, sizeof(name)) == 1 && strstr(name, "Late pad"));
+    CHECK(xbox_HostInputKeyboardSlot() == 1 && xbox_HostInputPlayerCount() == 2);
+    xbox_HostInputKey('J', 1);
+    settle();
+    s = get(1, &rc);
+    CHECK(rc == ERROR_SUCCESS && s.Gamepad.bAnalogButtons[XBOX_BUTTON_A] == 255);
+    xbox_HostInputKey('J', 0);
+    SDL_CloseJoystick(pad1.joy);
+    SDL_DetachVirtualJoystick(pad1.id);
+    settle();
+    s = get(0, &rc);
     xbox_HostInputStop();
 
     /* ---- merged: the keyboard adds to player 1's pad ---- */

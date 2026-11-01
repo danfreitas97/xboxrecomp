@@ -252,10 +252,29 @@ static void log_line(const char *fmt, const char *a, int b)
     fflush(stderr);
 }
 
-/* Give a new device the lowest slot the keyboard does not occupy. */
+/* Give a new device the lowest slot the keyboard does not occupy. With the keyboard on "auto" as
+ * player 1 (no pad at the start), the first pad that arrives later takes player 1 and the keyboard
+ * moves behind it: a controller switched on after the game started was player 2, and the menus
+ * that wait for player 1 did not answer it (FFNY reports, 2026-10/11). Other slots keep their
+ * devices: a pad plugged in beside a pad and the keyboard still goes after the keyboard. */
 static void assign_device(int d)
 {
     int s;
+    if (H.cfg.keyboard == INPUT_HOST_KEYBOARD_AUTO && H.kb_slot == 0 && H.slot[0].device < 0) {
+        int free_slot = -1, below = 0;
+        for (s = 0; s < H.kb_slot; s++)
+            if (H.slot[s].device < 0) below = 1;     /* a free slot before the keyboard: the pad goes there */
+        for (s = H.kb_slot + 1; s < SLOTS && free_slot < 0 && !below; s++)
+            if (H.slot[s].device < 0) free_slot = s;
+        if (free_slot >= 0) {
+            int pad_slot = H.kb_slot;
+            H.kb_slot = free_slot;
+            if (H.players < free_slot + 1) H.players = free_slot + 1;
+            log_line("[INPUT] keyboard and mouse move to player %d (a pad takes player %d)\n", free_slot + 1,
+                     pad_slot + 1);
+            if (g_need_players) g_need_players(free_slot + 1);
+        }
+    }
     for (s = 0; s < SLOTS; s++) {
         if (s == H.kb_slot || H.slot[s].device >= 0) continue;
         H.slot[s].device = d;
@@ -669,7 +688,7 @@ static DWORD WINAPI reader_thread(LPVOID unused)
     timeBeginPeriod(1);
 
 #ifdef XBOXRECOMP_HAVE_SDL3
-    if (H.cfg.use_sdl && (!H.cfg.no_pads || H.cfg.virtual_pads)) {
+    if (H.cfg.use_sdl && (!H.cfg.no_pads || H.cfg.virtual_pads || H.cfg.virtual_late_ms)) {
         SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
         if (SDL_Init(SDL_INIT_GAMEPAD)) {
             H.sdl = 1;

@@ -18,6 +18,16 @@ static void trace_pause(const char *stage,int slot,const void *data,unsigned n,u
     }
 }
 
+/* The other player's agreed pad in an online test: START and Y-shoulder bits, packet 7. */
+static DWORD remote_pad(int slot,XBOX_INPUT_STATE *s)
+{
+    (void)slot;
+    memset(s,0,sizeof *s);
+    s->dwPacketNumber=7;
+    s->Gamepad.wButtons=0x1010;
+    return 0;
+}
+
 static void set_x(int slot,int pressed)
 {
     uint8_t held[INPUT_CONTROL_COUNT] = {0};
@@ -106,6 +116,31 @@ int main(void)
       xbox_HostInputConsumeGeneration(0,101,&state.Gamepad,18,fresh);
       CHECK(xbox_HostInputPeekState(0,&state,&token)==0 && !token);
     }
+    /* Online play: no retained transitions while it is on (the legacy USB path decides), this PC's
+     * devices on its port and the agreed pad on the other, START held back in a lockstep fight. */
+    set_x(0,0);xbox_HostInputCancelEdges(0);
+    CHECK(xbox_HostInputConsumedEdges());
+    xbox_HostInputSetNetplayMulti(1,0,2u,remote_pad);
+    CHECK(!xbox_HostInputConsumedEdges());
+    set_x(0,1);set_x(0,0);
+    CHECK(xbox_HostInputPeekState(0,&state,&token)==0 && !token && !state.Gamepad.bAnalogButtons[XBOX_BUTTON_X]);
+    set_x(0,1);
+    CHECK(xbox_HostInputPeekState(0,&state,&token)==0 && !token && state.Gamepad.bAnalogButtons[XBOX_BUTTON_X]);
+    CHECK(xbox_HostInputGetState(1,&state)==0 && state.dwPacketNumber==7 && (state.Gamepad.wButtons&0x1010)==0x1010);
+    xbox_HostInputSetNetplayFight(0x0010);
+    CHECK(xbox_HostInputPeekState(1,&state,&token)==0 && (state.Gamepad.wButtons&0x1010)==0x1000);
+    CHECK(xbox_HostInputCurrentState(2,&state)==0 && !state.Gamepad.wButtons);
+    xbox_HostInputSetNetplayFight(0);
+    CHECK(xbox_HostInputPeekState(2,&state,&token)!=0);
+    xbox_HostInputSetNetplay(0,0,0,NULL);
+    CHECK(xbox_HostInputConsumedEdges());
+    set_x(0,0);
+    CHECK(xbox_HostInputPeekState(0,&state,&token)==0 && token && !state.Gamepad.bAnalogButtons[XBOX_BUTTON_X]);
+    xbox_HostInputReportDelivered(0,token);
+    xbox_HostInputConsumePacket(0,200,&state.Gamepad,18);
+    set_x(0,1);set_x(0,0);
+    CHECK(xbox_HostInputPeekState(0,&state,&token)==0 && token && state.Gamepad.bAnalogButtons[XBOX_BUTTON_X]);
+    xbox_HostInputCancelEdges(0);
     { uint64_t before=xbox_HostInputEdgeGeneration(0);
       xbox_HostInputStop();
       CHECK(xbox_HostInputStart(&cfg)==2);

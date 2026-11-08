@@ -264,12 +264,14 @@ int d3d8_Nv2aProgramDraw(uint32_t hash, const char *hlsl, uint32_t used,
     {
         /* A widescreen placement for this draw: clip x becomes x * kx + bx
          * (the program's epilogue computes x * Screen.x - TexScale.w). */
-        float kx, bx;
+        float kx, bx, psx, psy;
         d3d8_GetDrawPlacement(&kx, &bx);
-        frame[0] = 2.0f * kx / (float)d3d8_GetBackbufferWidth();
+        /* oPos in a supersampled surface's pixels (d3d8_SetPositionScale). */
+        d3d8_GetPositionScale(&psx, &psy);
+        frame[0] = 2.0f * kx / ((float)d3d8_GetBackbufferWidth() * psx);
         frame[7] = kx - bx;
+        frame[1] = 2.0f / ((float)d3d8_GetBackbufferHeight() * psy);
     }
-    frame[1] = 2.0f / (float)d3d8_GetBackbufferHeight();
     frame[2] = zscale;
     frame[3] = s_points ? s_point_size : 0.0f;
     frame[4] = texscale[0];

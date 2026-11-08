@@ -40,6 +40,14 @@ UINT                 d3d8_GetRenderScale(void);
  * the target is widened to a canvas (d3d8_present_set_canvas_aspect). */
 float                d3d8_GetCanvasScaleX(void);
 float                d3d8_GetCanvasScaleY(void);
+/* Title pixels per logical pixel in the next draws' screen-space positions.
+ * A title drawing into an anti-aliased (supersampled) surface sends positions
+ * in that surface's pixels -- x in 0..1280 for a 640x480 title at 2x1 -- while
+ * the target here is logical size; the pre-transformed and vertex-program
+ * paths divide by this. 1, 1 = unchanged. Set by the PGRAPH translator around
+ * its off-screen colour surfaces (nv2a_pgraph_d3d11.c). */
+void                 d3d8_SetPositionScale(float sx, float sy);
+void                 d3d8_GetPositionScale(float *sx, float *sy);
 /* Widescreen 2D placement for the next draws: clip-space x becomes x * kx + bx
  * (1, 0 = unchanged). Set per draw by the push-buffer executor. */
 void                 d3d8_SetDrawPlacement(float kx, float bx);

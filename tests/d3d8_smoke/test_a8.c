@@ -25,6 +25,7 @@ IDirect3DBaseTexture8 *d3d8_GetStageTexture(DWORD stage) { return textures[stage
 UINT d3d8_GetBackbufferWidth(void) { return 1; }
 UINT d3d8_GetBackbufferHeight(void) { return 1; }
 void d3d8_GetDrawPlacement(float *kx, float *bx) { *kx = 1.0f; *bx = 0.0f; }
+void d3d8_GetPositionScale(float *sx, float *sy) { *sx = 1.0f; *sy = 1.0f; }
 const D3DMATRIX *d3d8_GetTransform(D3DTRANSFORMSTATETYPE type) { (void)type; return &identity; }
 const D3DLIGHT8 *d3d8_GetLight(DWORD index) { (void)index; return NULL; }
 BOOL d3d8_GetLightEnable(DWORD index) { (void)index; return FALSE; }

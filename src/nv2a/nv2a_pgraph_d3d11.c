@@ -959,6 +959,8 @@ int pgraph_d3d11_replace_texture_ready(uint32_t guest_addr, const void *data,
     return bound;
 }
 
+static IDirect3DTexture8 *rt_texture(uint32_t guest_addr);   /* off-screen surfaces, below */
+
 int pgraph_d3d11_set_texture_ready(uint32_t guest_addr, const void *data,
                                    uint32_t width, uint32_t height,
                                    uint32_t nv2a_format)
@@ -980,6 +982,16 @@ int pgraph_d3d11_set_texture_ready(uint32_t guest_addr, const void *data,
     if (!width || !height) {
         dev->lpVtbl->SetTexture(dev, g_bind_stage, NULL);
         return 0;
+    }
+
+    /* A surface the title rendered into off screen: what it drew, not the
+     * guest memory behind it (see pgraph_d3d11_set_color_target). */
+    {
+        IDirect3DTexture8 *rt = rt_texture(guest_addr);
+        if (rt) {
+            dev->lpVtbl->SetTexture(dev, g_bind_stage, (IDirect3DBaseTexture8 *)rt);
+            return 1;
+        }
     }
 
     for (i = 0; i < s_ready_tex_count; i++) {
@@ -1184,6 +1196,113 @@ void pgraph_d3d11_set_texture_filter(uint32_t nv2a_filter)
 void pgraph_d3d11_bind_stage(int stage)
 {
     g_bind_stage = (stage >= 0 && stage < 4) ? stage : 0;
+}
+
+/* ── Off-screen colour surfaces (render to texture) ──────────────────────
+ *
+ * Everything used to be drawn into the one back buffer, which is right for a
+ * title that renders straight into the surface it displays. A title with
+ * console anti-aliasing does not: XDK D3D renders the scene into a
+ * supersampled surface (SET_SURFACE_FORMAT bits 12-15: 1 = 2x1, 2 = 2x2;
+ * 1280x480 for a 640x480 title at 2x1), with positions in that surface's
+ * pixels, then draws one screen-covering triangle that samples it into the
+ * displayed 640x480 surface. Drawn into the back buffer, the scene landed at
+ * twice its size (the top-left quarter showed), and the resolve read the
+ * guest memory behind the surface, which no draw had written. Turok:
+ * Evolution's logos and legal screen.
+ *
+ * So a supersampled colour surface gets a texture of its own, keyed on its
+ * guest address, at the back buffer's size: positions are scaled down by
+ * the AA factor while it is the target (d3d8_SetPositionScale), which keeps
+ * the default depth buffer usable with it. A batch that samples the
+ * surface's address gets this texture instead of the guest memory. A
+ * surface without AA bits draws into the back buffer as before, so a title
+ * that never turns AA on takes none of this path. */
+#define PG_RT_MAX 8
+static struct {
+    uint32_t           addr;
+    IDirect3DTexture8 *tex;
+    IDirect3DSurface8 *surf;
+} s_rt[PG_RT_MAX];
+static int s_rt_count;
+static int s_rt_active = -1;        /* index into s_rt, or -1: the back buffer */
+
+extern void d3d8_SetPositionScale(float sx, float sy);
+
+static int rt_find(uint32_t addr)
+{
+    int i;
+    for (i = 0; i < s_rt_count; i++)
+        if (s_rt[i].addr == addr)
+            return i;
+    return -1;
+}
+
+static int rt_create(IDirect3DDevice8 *dev, uint32_t addr)
+{
+    IDirect3DSurface8 *bb = NULL;
+    D3DSURFACE_DESC desc;
+    IDirect3DTexture8 *tex = NULL;
+    IDirect3DSurface8 *surf = NULL;
+    HRESULT hr;
+    int i;
+
+    if (s_rt_count >= PG_RT_MAX)
+        return -1;
+    /* The back buffer's real size: the title's 640x480 times the render
+     * scale, so the off-screen surface matches the default depth buffer. */
+    if (FAILED(dev->lpVtbl->GetBackBuffer(dev, 0, 0, &bb)) || !bb)
+        return -1;
+    hr = bb->lpVtbl->GetDesc(bb, &desc);
+    bb->lpVtbl->Release(bb);
+    if (FAILED(hr))
+        return -1;
+    hr = dev->lpVtbl->CreateTexture(dev, desc.Width, desc.Height, 1, D3DUSAGE_RENDERTARGET,
+                                    D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT, &tex);
+    if (FAILED(hr) || !tex) {
+        fprintf(stderr, "[PGRAPH-D3D11] off-screen surface 0x%08X: CreateTexture failed (0x%08lX)\n",
+                addr, (unsigned long)hr);
+        return -1;
+    }
+    if (FAILED(tex->lpVtbl->GetSurfaceLevel(tex, 0, &surf)) || !surf) {
+        tex->lpVtbl->Release(tex);
+        return -1;
+    }
+    i = s_rt_count++;
+    s_rt[i].addr = addr;
+    s_rt[i].tex  = tex;
+    s_rt[i].surf = surf;
+    fprintf(stderr, "[PGRAPH-D3D11] off-screen surface 0x%08X: %ux%u texture\n",
+            addr, desc.Width, desc.Height);
+    return i;
+}
+
+void pgraph_d3d11_set_color_target(uint32_t guest_addr, uint32_t aa_sx, uint32_t aa_sy)
+{
+    IDirect3DDevice8 *dev;
+    int want = -1;
+
+    if (!g_pg.initialized || !(dev = xbox_GetD3DDevice()))
+        return;
+    if (aa_sx > 1 || aa_sy > 1) {
+        want = rt_find(guest_addr);
+        if (want < 0)
+            want = rt_create(dev, guest_addr);
+        /* No texture: draw into the back buffer as before, scaled, which is
+         * still better than at twice the size. */
+    }
+    if (want != s_rt_active) {
+        dev->lpVtbl->SetRenderTarget(dev, want >= 0 ? s_rt[want].surf : NULL, NULL);
+        s_rt_active = want;
+    }
+    d3d8_SetPositionScale(aa_sx > 1 ? (float)aa_sx : 1.0f, aa_sy > 1 ? (float)aa_sy : 1.0f);
+}
+
+/* The texture for an off-screen surface at this address, if there is one. */
+static IDirect3DTexture8 *rt_texture(uint32_t guest_addr)
+{
+    int i = rt_find(guest_addr);
+    return i >= 0 ? s_rt[i].tex : NULL;
 }
 
 /* The surface clip (NV097 0x0200/0x0204) the next draws are confined to. */

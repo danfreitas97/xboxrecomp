@@ -333,6 +333,20 @@ HWND                 d3d8_GetHWND(void) { return g_device_state.hwnd; }
 /* The title's screen size: pre-transformed vertices and full-screen quads are
  * in these units whatever the render scale. */
 UINT                 d3d8_GetBackbufferWidth(void) { return g_device_state.logical_width; }
+
+/* See d3d8_internal.h. Written and read on the executor's thread, which is
+ * the only one that draws. */
+static float g_pos_scale_x = 1.0f, g_pos_scale_y = 1.0f;
+void d3d8_SetPositionScale(float sx, float sy)
+{
+    g_pos_scale_x = sx > 0.0f ? sx : 1.0f;
+    g_pos_scale_y = sy > 0.0f ? sy : 1.0f;
+}
+void d3d8_GetPositionScale(float *sx, float *sy)
+{
+    if (sx) *sx = g_pos_scale_x;
+    if (sy) *sy = g_pos_scale_y;
+}
 UINT                 d3d8_GetBackbufferHeight(void) { return g_device_state.logical_height; }
 UINT                 d3d8_GetRenderScale(void) { return g_device_state.render_scale ? g_device_state.render_scale : 1; }
 static float g_place_kx = 1.0f, g_place_bx = 0.0f;

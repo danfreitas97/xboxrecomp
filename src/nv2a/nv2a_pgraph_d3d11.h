@@ -117,6 +117,11 @@ void pgraph_d3d11_set_anisotropy(int max_anisotropy);
 void pgraph_d3d11_bind_stage(int stage);
 void pgraph_d3d11_unbind_stage(int stage);
 void pgraph_d3d11_set_surface_clip(uint32_t x, uint32_t y, uint32_t w, uint32_t h);
+/* The colour surface the next draws and clears go to: its guest address and
+ * anti-aliasing factor (SET_SURFACE_FORMAT bits 12-15). A supersampled surface
+ * is drawn into a texture of its own, which a later batch sampling that
+ * address reads; anything else into the back buffer. */
+void pgraph_d3d11_set_color_target(uint32_t guest_addr, uint32_t aa_sx, uint32_t aa_sy);
 void pgraph_d3d11_set_point_mode(int on, float size);
 /* Widescreen: clip-space x of the next draws becomes x * kx + bx (1, 0 = unchanged). */
 void pgraph_d3d11_set_placement(float kx, float bx);

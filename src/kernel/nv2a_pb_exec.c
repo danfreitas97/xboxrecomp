@@ -4002,6 +4002,20 @@ static uint32_t pal_tex_sig(const uint8_t *idx, uint32_t n,
  * is rendered off-screen and composited, which the D3D11 path (one back
  * buffer) does not model. */
 static uint32_t s_surf_addr[32];
+/* Tell the GPU translator which colour surface the next draws and clears go
+ * to, and at what anti-aliasing factor: a supersampled one is drawn off
+ * screen and sampled by the title's resolve pass (pgraph_d3d11_set_color_target).
+ * Called whenever the surface's address or format changes. */
+static void sync_color_target(void)
+{
+    static int fwd = -1;
+    if (fwd < 0)
+        fwd = getenv("RECOMP_PB_D3D11") != NULL;
+    if (fwd)
+        pgraph_d3d11_set_color_target(dma_resolve(s_gpu.color_offset),
+                                      (uint32_t)aa_scale_x(), (uint32_t)aa_scale_y());
+}
+
 static unsigned s_surf_draws[32], s_surf_n;
 static int surf_trace_on(void)
 {
@@ -5658,6 +5672,7 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
     case NV097_SET_SURFACE_FORMAT:
         s_gpu.format = param;
         surface_apply_clip();
+        sync_color_target();
         break;
     case 0x1D98:                       /* SET_CLEAR_RECT_HORIZONTAL */
         s_gpu.clear_rect_h = param;
@@ -5675,6 +5690,7 @@ void nv2a_pb_exec_method(uint32_t subch, uint32_t method, uint32_t param)
             fprintf(stderr, "[FTRACE] color offset -> %08X%c", param, 10);
         s_gpu.color_offset = param;
         surf_note_target(dma_resolve(param));
+        sync_color_target();
         if (batch_dump_flip(s_gpu.flips))
             fprintf(stderr, "  [BATCH] f%u colour surface -> 0x%08X%c", s_gpu.flips,
                     dma_resolve(param), 10);

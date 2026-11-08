@@ -938,8 +938,12 @@ static void ff_vs_prepare_draw(DWORD fvf)
             memcpy(cb->world_inv_transpose, identity, sizeof(identity));
             memcpy(cb->world_view, identity, sizeof(identity));
             memcpy(cb->world_view_inv_transpose, identity, sizeof(identity));
-            cb->screen_w = (float)d3d8_GetBackbufferWidth();
-            cb->screen_h = (float)d3d8_GetBackbufferHeight();
+            float psx, psy;
+            d3d8_GetPositionScale(&psx, &psy);
+            /* Positions in a supersampled surface's pixels: that surface is
+             * psx x psy times the logical size (d3d8_SetPositionScale). */
+            cb->screen_w = (float)d3d8_GetBackbufferWidth() * psx;
+            cb->screen_h = (float)d3d8_GetBackbufferHeight() * psy;
             cb->flags = 0x01; /* pre-transformed */
             {
                 /* A widescreen placement for this draw: clip x becomes x * kx + bx. */

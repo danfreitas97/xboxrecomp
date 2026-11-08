@@ -3682,3 +3682,18 @@ float d3d8_GetCanvasScaleX(void) { return vk.lw ? (float)vk.tw / (float)vk.lw : 
 float d3d8_GetCanvasScaleY(void) { return vk.lh ? (float)vk.th / (float)vk.lh : (float)d3d8_GetRenderScale(); }
 UINT d3d8_GetBackbufferWidth(void) { return vk.lw; }
 UINT d3d8_GetBackbufferHeight(void) { return vk.lh; }
+
+/* See d3d8_internal.h. Kept here so the translator links on this backend;
+ * the Vulkan draw paths do not apply it yet, so an anti-aliased title's
+ * scenes still land at twice their size on Vulkan. */
+static float s_vk_pos_sx = 1.0f, s_vk_pos_sy = 1.0f;
+void d3d8_SetPositionScale(float sx, float sy)
+{
+    s_vk_pos_sx = sx > 0.0f ? sx : 1.0f;
+    s_vk_pos_sy = sy > 0.0f ? sy : 1.0f;
+}
+void d3d8_GetPositionScale(float *sx, float *sy)
+{
+    if (sx) *sx = s_vk_pos_sx;
+    if (sy) *sy = s_vk_pos_sy;
+}
